@@ -2,7 +2,7 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#     "google-generativeai>=0.8.0",
+#     "google-genai>=1.0.0",
 # ]
 # ///
 """
@@ -14,18 +14,19 @@ Usage:
 """
 
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
 
-import google.generativeai as genai
+from google import genai
 
 
 def solve_captcha(image_path: str, target: str) -> dict:
     """Analyze CAPTCHA image and return positions containing target."""
     
     # Get API key from env or OpenClaw config
-    api_key = os.environ.get("GEMINI_API_KEY")
+    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if not api_key:
         config_path = Path.home() / ".openclaw" / "openclaw.json"
         if config_path.exists():
@@ -35,17 +36,26 @@ def solve_captcha(image_path: str, target: str) -> dict:
     if not api_key:
         return {"error": "No GEMINI_API_KEY found"}
     
-    genai.configure(api_key=api_key)
-    
     # Load image
     image_path = Path(image_path)
     if not image_path.exists():
         return {"error": f"Image not found: {image_path}"}
     
     image_data = image_path.read_bytes()
+    image_b64 = base64.standard_b64encode(image_data).decode("utf-8")
     
-    # Use Gemini 3 Pro for best accuracy
-    model = genai.GenerativeModel("gemini-3-pro-preview")
+    # Determine mime type
+    suffix = image_path.suffix.lower()
+    mime_type = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+    }.get(suffix, "image/png")
+    
+    # Create client and generate
+    client = genai.Client(api_key=api_key)
     
     prompt = f"""Analyze this CAPTCHA image. Find all grid squares containing "{target}".
 
@@ -58,22 +68,35 @@ Examine each square carefully. Include squares where the object is partially vis
 Respond with ONLY this JSON (no other text):
 {{"positions": [numbers], "grid_size": "3x3" or "4x4", "confidence": "high" or "medium" or "low"}}"""
 
-    response = model.generate_content([
-        prompt,
-        {"mime_type": "image/png", "data": image_data}
-    ])
-    
-    text = response.text.strip()
-    
-    # Extract JSON from response
     try:
+        response = client.models.generate_content(
+            model="gemini-3-pro-preview",
+            contents=[
+                prompt,
+                {
+                    "inline_data": {
+                        "mime_type": mime_type,
+                        "data": image_b64,
+                    }
+                }
+            ],
+        )
+        
+        text = response.text.strip()
+        
+        # Extract JSON from response
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
         elif "```" in text:
             text = text.split("```")[1].split("```")[0].strip()
+        
         return json.loads(text)
     except json.JSONDecodeError:
         return {"raw_response": text, "error": "Could not parse JSON"}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        client.close()
 
 
 def main():
