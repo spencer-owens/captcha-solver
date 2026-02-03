@@ -20,8 +20,20 @@ Output:
 ## Requirements
 
 - Python 3.10+
-- `uv` (recommended) or `pip install google-generativeai`
-- `GEMINI_API_KEY` environment variable
+- `GEMINI_API_KEY` environment variable (get one at [aistudio.google.com](https://aistudio.google.com))
+
+### Install
+
+**Option A: uv (recommended)** - zero setup, deps auto-install:
+```bash
+uv run scripts/solve.py -i captcha.png -t "bicycles"
+```
+
+**Option B: pip**
+```bash
+pip install -r requirements.txt
+python scripts/solve.py -i captcha.png -t "bicycles"
+```
 
 ## Usage
 
