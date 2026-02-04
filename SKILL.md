@@ -1,35 +1,62 @@
 ---
 name: captcha-solver
-description: Solve image-based CAPTCHAs (reCAPTCHA, hCaptcha) using Gemini 3 vision. Use when browser automation encounters a CAPTCHA challenge requiring image selection (e.g., "select all squares with bicycles/traffic lights/bridges").
+description: Solve reCAPTCHA challenges using audio transcription (Whisper) or image vision (Gemini). Audio method is faster and more reliable. Use when browser automation encounters a CAPTCHA challenge.
 ---
 
 # CAPTCHA Solver
 
-Solve grid-based image CAPTCHAs using Gemini 3 Pro vision.
+Two methods for solving reCAPTCHA:
+1. **Audio + Whisper** ⭐ (recommended) - 4 seconds, more reliable
+2. **Image + Gemini Vision** - 20-30 seconds, grid detection issues
 
-## Quick Start
+## Method 1: Audio CAPTCHA (Recommended)
+
+```bash
+# Download audio and transcribe
+uv run {baseDir}/scripts/solve_audio.py --file <audio.mp3>
+
+# Or directly from URL
+uv run {baseDir}/scripts/solve_audio.py --url "<recaptcha_audio_url>"
+```
+
+### Workflow
+
+1. Click "Get an audio challenge" button in reCAPTCHA
+2. Download MP3 or copy audio URL from "download audio" link
+3. Run solver to get transcription
+4. Type transcription into text field
+5. Click Verify ✓
+
+### Example
+
+```bash
+# Download audio
+curl -o /tmp/audio.mp3 "https://www.recaptcha.net/recaptcha/api2/payload/audio.mp3?..."
+
+# Transcribe
+uv run {baseDir}/scripts/solve_audio.py -f /tmp/audio.mp3
+# Output: Transcription: if those users global group
+
+# Type into CAPTCHA and verify
+```
+
+## Method 2: Image CAPTCHA (Fallback)
 
 ```bash
 uv run {baseDir}/scripts/solve.py --image <screenshot.png> --target "<object>"
 ```
 
-Example:
+### Options
+
 ```bash
-uv run {baseDir}/scripts/solve.py -i captcha.png -t "traffic lights"
-# Output: {"positions": [2, 5, 8], "grid_size": "3x3", "confidence": "high"}
+# Use flash model for speed (less accurate)
+uv run {baseDir}/scripts/solve.py -i captcha.png -t "bicycles" -m gemini-3-flash-preview
+
+# Auto-crop full page screenshot
+uv run {baseDir}/scripts/solve.py -i fullpage.png -t "buses" --crop
 ```
 
-## Workflow
-
-1. **Screenshot** the CAPTCHA when it appears
-2. **Run solver** with the target object from the prompt
-3. **Map positions** to DOM refs (buttons are ordered left-to-right, top-to-bottom)
-4. **Click** the identified positions
-5. **Verify** and repeat if needed
-
-## Position Mapping
-
-Grid positions are numbered left-to-right, top-to-bottom:
+### Position Mapping
 
 ```
 3x3 grid:        4x4 grid:
@@ -39,19 +66,13 @@ Grid positions are numbered left-to-right, top-to-bottom:
                  [13][14][15][16]
 ```
 
-From a browser snapshot, extract button refs in row order:
-```python
-# Row 1: refs[0], refs[1], refs[2] → positions 1, 2, 3
-# Row 2: refs[3], refs[4], refs[5] → positions 4, 5, 6
-# etc.
-```
+## Requirements
 
-## API Key
+- Audio: Whisper (auto-installs via uv)
+- Image: `GEMINI_API_KEY` env var
 
-Uses `GEMINI_API_KEY` env var or `skills."nano-banana-pro".apiKey` from OpenClaw config.
+## Tips
 
-## Notes
-
-- Always use `gemini-3-pro-preview` — it significantly outperforms 2.x models on CAPTCHAs
-- If CAPTCHA fails, screenshot again (images refresh) and retry
-- Some CAPTCHAs have fading tiles that refresh after selection — wait briefly between clicks
+- **Prefer audio**: Much faster and more reliable than image
+- **Whisper tiny is enough**: reCAPTCHA audio is simple
+- **Retry on failure**: CAPTCHAs regenerate, just try again
